@@ -25,6 +25,10 @@
     box-sizing: border-box;
 }
 
+svg {
+    fill: none;
+}
+
 body {
     font-family: 'Inter', sans-serif;
     background: var(--dark);
@@ -367,7 +371,7 @@ body::before {
 
 .task-btn {
     padding: 0.5rem;
-    background: var(--dark);
+    background: transparent;
     border: 1px solid var(--border);
     border-radius: 0.5rem;
     cursor: pointer;
@@ -378,10 +382,11 @@ body::before {
     width: 16px;
     height: 16px;
     stroke: var(--text-secondary);
+    fill: none;
 }
 
 .task-btn:hover {
-    background: var(--dark-light);
+    background: var(--dark-lighter);
     border-color: var(--primary);
 }
 
@@ -699,13 +704,43 @@ body::before {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--gradient-1);
+    background: var(--dark);
+    border: 2px solid var(--primary);
+    flex-shrink: 0;
+}
+
+.insight-card.type-optimization .insight-icon {
+    border-color: #43e97b;
+    background: rgba(67, 233, 123, 0.1);
+}
+
+.insight-card.type-warning .insight-icon {
+    border-color: #f5576c;
+    background: rgba(245, 87, 108, 0.1);
+}
+
+.insight-card.type-suggestion .insight-icon {
+    border-color: #4facfe;
+    background: rgba(79, 172, 254, 0.1);
 }
 
 .insight-icon svg {
     width: 24px;
     height: 24px;
-    color: white;
+    color: currentColor;
+    stroke: var(--primary);
+}
+
+.insight-card.type-optimization .insight-icon svg {
+    stroke: #43e97b;
+}
+
+.insight-card.type-warning .insight-icon svg {
+    stroke: #f5576c;
+}
+
+.insight-card.type-suggestion .insight-icon svg {
+    stroke: #4facfe;
 }
 
 .insight-title {
@@ -979,7 +1014,7 @@ form {
 /* Enhanced Button Styles */
 .btn-icon {
     padding: 0.5rem;
-    background: var(--dark);
+    background: transparent;
     border: 1px solid var(--border);
     border-radius: 0.5rem;
     cursor: pointer;
@@ -993,10 +1028,11 @@ form {
     width: 18px;
     height: 18px;
     stroke: var(--text-secondary);
+    fill: none;
 }
 
 .btn-icon:hover {
-    background: var(--dark-light);
+    background: var(--dark-lighter);
     border-color: var(--primary);
     transform: translateY(-2px);
 }
@@ -1007,6 +1043,7 @@ form {
 
 .btn-icon.edit:hover {
     border-color: var(--warning);
+    background: rgba(245, 158, 11, 0.1);
 }
 
 .btn-icon.edit:hover svg {
@@ -1015,6 +1052,7 @@ form {
 
 .btn-icon.delete:hover {
     border-color: var(--danger);
+    background: rgba(239, 68, 68, 0.1);
 }
 
 .btn-icon.delete:hover svg {
