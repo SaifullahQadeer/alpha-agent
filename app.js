@@ -1,7 +1,7 @@
 // Alpha Agent - AI Task Management Application
 // Gemini AI Configuration
 const GEMINI_API_KEY = 'AIzaSyC6bGcRAXbcHbRasEKBcdv86fen5Uk93_c';
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 
 // Data Management
 class AlphaAgent {
