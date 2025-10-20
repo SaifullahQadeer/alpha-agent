@@ -947,3 +947,306 @@ form {
 .empty-state p {
     font-size: 0.875rem;
 }
+
+/* Chart Containers */
+.chart-container {
+    background: var(--dark-lighter);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.chart-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    color: var(--text);
+}
+
+.chart-wrapper {
+    position: relative;
+    height: 300px;
+}
+
+.charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+/* Enhanced Button Styles */
+.btn-icon {
+    padding: 0.5rem;
+    background: var(--dark);
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-icon svg {
+    width: 18px;
+    height: 18px;
+    stroke: var(--text-secondary);
+}
+
+.btn-icon:hover {
+    background: var(--dark-light);
+    border-color: var(--primary);
+    transform: translateY(-2px);
+}
+
+.btn-icon:hover svg {
+    stroke: var(--primary);
+}
+
+.btn-icon.edit:hover {
+    border-color: var(--warning);
+}
+
+.btn-icon.edit:hover svg {
+    stroke: var(--warning);
+}
+
+.btn-icon.delete:hover {
+    border-color: var(--danger);
+}
+
+.btn-icon.delete:hover svg {
+    stroke: var(--danger);
+}
+
+/* Enhanced Client Card */
+.client-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    margin-bottom: 1rem;
+}
+
+.client-card-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.client-card-info h3 {
+    font-size: 1.25rem;
+    margin-bottom: 0.25rem;
+}
+
+/* Enhanced Task Item */
+.task-progress {
+    width: 100%;
+    height: 4px;
+    background: var(--dark);
+    border-radius: 2px;
+    margin-top: 1rem;
+    overflow: hidden;
+}
+
+.task-progress-bar {
+    height: 100%;
+    background: var(--gradient-1);
+    transition: width 0.3s ease;
+    border-radius: 2px;
+}
+
+/* Loading Spinner */
+.loading {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: var(--primary);
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.btn-loading {
+    position: relative;
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+.btn-loading::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    top: 50%;
+    left: 50%;
+    margin-left: -8px;
+    margin-top: -8px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: white;
+    animation: spin 1s ease-in-out infinite;
+}
+
+/* Tooltip */
+.tooltip {
+    position: relative;
+}
+
+.tooltip::before {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%) translateY(-5px);
+    padding: 0.5rem 0.75rem;
+    background: var(--dark);
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.3s ease;
+    z-index: 100;
+}
+
+.tooltip:hover::before {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-10px);
+}
+
+/* Enhanced Input Focus */
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    background: var(--dark-light);
+}
+
+/* Success Message */
+.success-message {
+    position: fixed;
+    top: 2rem;
+    right: 2rem;
+    padding: 1rem 1.5rem;
+    background: var(--gradient-4);
+    border-radius: 0.75rem;
+    color: white;
+    font-weight: 500;
+    box-shadow: var(--shadow);
+    animation: slideInRight 0.3s ease, fadeOut 0.3s ease 2.7s;
+    z-index: 1001;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes fadeOut {
+    to {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+}
+
+/* AI Loading State */
+.ai-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+    gap: 1rem;
+}
+
+.ai-loading-text {
+    font-size: 1.125rem;
+    color: var(--text-secondary);
+}
+
+/* Enhanced Stats */
+.stat-card:hover {
+    transform: translateY(-5px) scale(1.02);
+}
+
+/* Better Scrollbar for Modal */
+.modal-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.modal-content::-webkit-scrollbar-track {
+    background: var(--dark);
+}
+
+.modal-content::-webkit-scrollbar-thumb {
+    background: var(--dark-lighter);
+    border-radius: 3px;
+}
+
+.modal-content::-webkit-scrollbar-thumb:hover {
+    background: var(--primary);
+}
+
+/* Placeholder Styling */
+::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.5;
+}
+
+/* Enhanced Priority Badge */
+.priority-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.priority-badge::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.priority-high::before {
+    background: var(--danger);
+}
+
+.priority-medium::before {
+    background: var(--warning);
+}
+
+.priority-low::before {
+    background: var(--success);
+}
+
+/* Enhanced Mobile Responsiveness */
+@media (max-width: 768px) {
+    .charts-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .chart-wrapper {
+        height: 250px;
+    }
+
+    .success-message {
+        top: auto;
+        bottom: 2rem;
+        left: 1rem;
+        right: 1rem;
+    }
+}

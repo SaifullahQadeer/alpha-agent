@@ -1,10 +1,17 @@
 // Alpha Agent - AI Task Management Application
+// Gemini AI Configuration
+const GEMINI_API_KEY = 'AIzaSyC6bGcRAXbcHbRasEKBcdv86fen5Uk93_c';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
+
 // Data Management
 class AlphaAgent {
     constructor() {
         this.tasks = this.loadFromStorage('tasks', []);
         this.clients = this.loadFromStorage('clients', []);
         this.timeEntries = this.loadFromStorage('timeEntries', []);
+        this.charts = {};
+        this.editingTaskId = null;
+        this.editingClientId = null;
         this.init();
     }
 
@@ -34,9 +41,9 @@ class AlphaAgent {
         });
 
         // Modal Controls
-        document.getElementById('addTaskBtn').addEventListener('click', () => this.openModal('taskModal'));
+        document.getElementById('addTaskBtn').addEventListener('click', () => this.openTaskModal());
         document.getElementById('addTimeBtn').addEventListener('click', () => this.openModal('timeModal'));
-        document.getElementById('addClientBtn').addEventListener('click', () => this.openModal('clientModal'));
+        document.getElementById('addClientBtn').addEventListener('click', () => this.openClientModal());
 
         document.querySelectorAll('.close-modal, .cancel-modal').forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -57,7 +64,7 @@ class AlphaAgent {
 
         // Reports & Insights
         document.getElementById('generateReportBtn').addEventListener('click', () => this.generateReport());
-        document.getElementById('refreshInsightsBtn').addEventListener('click', () => this.generateInsights());
+        document.getElementById('refreshInsightsBtn').addEventListener('click', () => this.generateAIInsights());
 
         // Click outside modal to close
         document.querySelectorAll('.modal').forEach(modal => {
@@ -81,7 +88,7 @@ class AlphaAgent {
 
         // Render content for specific tabs
         if (tabName === 'reports') this.generateReport();
-        if (tabName === 'ai') this.generateInsights();
+        if (tabName === 'ai') this.generateAIInsights();
     }
 
     // Modal Management
@@ -89,27 +96,121 @@ class AlphaAgent {
         document.getElementById(modalId).classList.add('active');
     }
 
+    openTaskModal(taskId = null) {
+        this.editingTaskId = taskId;
+        const modal = document.getElementById('taskModal');
+        const form = document.getElementById('taskForm');
+        const title = document.getElementById('taskModalTitle');
+        const submitBtn = document.getElementById('taskSubmitBtn');
+
+        if (taskId) {
+            // Edit mode
+            const task = this.tasks.find(t => t.id === taskId);
+            if (task) {
+                title.textContent = 'Edit Task';
+                submitBtn.textContent = 'Update Task';
+                document.getElementById('taskId').value = task.id;
+                document.getElementById('taskTitle').value = task.title;
+                document.getElementById('taskDescription').value = task.description;
+                document.getElementById('taskClient').value = task.clientId;
+                document.getElementById('taskPriority').value = task.priority;
+                document.getElementById('taskEstimate').value = task.estimatedHours;
+            }
+        } else {
+            // Add mode
+            title.textContent = 'Add New Task';
+            submitBtn.textContent = 'Create Task';
+            form.reset();
+            this.setDefaultDate();
+        }
+
+        modal.classList.add('active');
+    }
+
+    openClientModal(clientId = null) {
+        this.editingClientId = clientId;
+        const modal = document.getElementById('clientModal');
+        const form = document.getElementById('clientForm');
+        const title = document.getElementById('clientModalTitle');
+        const submitBtn = document.getElementById('clientSubmitBtn');
+
+        if (clientId) {
+            // Edit mode
+            const client = this.clients.find(c => c.id === clientId);
+            if (client) {
+                title.textContent = 'Edit Client';
+                submitBtn.textContent = 'Update Client';
+                document.getElementById('clientId').value = client.id;
+                document.getElementById('clientName').value = client.name;
+                document.getElementById('clientEmail').value = client.email;
+                document.getElementById('clientRate').value = client.hourlyRate;
+                document.getElementById('clientProject').value = client.projectType;
+            }
+        } else {
+            // Add mode
+            title.textContent = 'Add New Client';
+            submitBtn.textContent = 'Create Client';
+            form.reset();
+        }
+
+        modal.classList.add('active');
+    }
+
     closeAllModals() {
         document.querySelectorAll('.modal').forEach(m => m.classList.remove('active'));
         document.querySelectorAll('form').forEach(f => f.reset());
+        this.editingTaskId = null;
+        this.editingClientId = null;
+    }
+
+    showSuccess(message) {
+        const existingMessage = document.querySelector('.success-message');
+        if (existingMessage) {
+            existingMessage.remove();
+        }
+
+        const messageEl = document.createElement('div');
+        messageEl.className = 'success-message';
+        messageEl.textContent = message;
+        document.body.appendChild(messageEl);
+
+        setTimeout(() => {
+            messageEl.remove();
+        }, 3000);
     }
 
     // Task Management
     handleTaskSubmit(e) {
         e.preventDefault();
 
-        const task = {
-            id: Date.now(),
+        const taskId = document.getElementById('taskId').value;
+        const taskData = {
             title: document.getElementById('taskTitle').value,
             description: document.getElementById('taskDescription').value,
             clientId: parseInt(document.getElementById('taskClient').value),
             priority: document.getElementById('taskPriority').value,
-            estimatedHours: parseFloat(document.getElementById('taskEstimate').value),
-            completed: false,
-            createdAt: new Date().toISOString()
+            estimatedHours: parseFloat(document.getElementById('taskEstimate').value)
         };
 
-        this.tasks.unshift(task);
+        if (taskId) {
+            // Update existing task
+            const task = this.tasks.find(t => t.id === parseInt(taskId));
+            if (task) {
+                Object.assign(task, taskData);
+                this.showSuccess('Task updated successfully!');
+            }
+        } else {
+            // Create new task
+            const task = {
+                id: Date.now(),
+                ...taskData,
+                completed: false,
+                createdAt: new Date().toISOString()
+            };
+            this.tasks.unshift(task);
+            this.showSuccess('Task created successfully!');
+        }
+
         this.saveToStorage('tasks', this.tasks);
         this.renderTasks();
         this.populateTaskSelects();
@@ -144,6 +245,7 @@ class AlphaAgent {
         container.innerHTML = filteredTasks.map(task => {
             const client = this.clients.find(c => c.id === task.clientId);
             const timeSpent = this.getTaskTimeSpent(task.id);
+            const progress = task.estimatedHours > 0 ? (timeSpent / task.estimatedHours) * 100 : 0;
 
             return `
                 <div class="task-item priority-${task.priority} ${task.completed ? 'completed' : ''}" data-id="${task.id}">
@@ -153,12 +255,18 @@ class AlphaAgent {
                             <div class="task-client">${client ? client.name : 'No Client'}</div>
                         </div>
                         <div class="task-actions">
-                            <button class="task-btn" onclick="app.toggleTask(${task.id})" title="${task.completed ? 'Mark as Active' : 'Mark as Complete'}">
+                            <button class="btn-icon edit" onclick="app.openTaskModal(${task.id})" data-tooltip="Edit Task">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <path d="M11 4H4C3.46957 4 2.96086 4.21071 2.58579 4.58579C2.21071 4.96086 2 5.46957 2 6V20C2 20.5304 2.21071 21.0391 2.58579 21.4142C2.96086 21.7893 3.46957 22 4 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V13" stroke="currentColor" stroke-width="2"/>
+                                    <path d="M18.5 2.5C18.8978 2.10217 19.4374 1.87868 20 1.87868C20.5626 1.87868 21.1022 2.10217 21.5 2.5C21.8978 2.89783 22.1213 3.43739 22.1213 4C22.1213 4.56261 21.8978 5.10217 21.5 5.5L12 15L8 16L9 12L18.5 2.5Z" stroke="currentColor" stroke-width="2"/>
+                                </svg>
+                            </button>
+                            <button class="btn-icon" onclick="app.toggleTask(${task.id})" data-tooltip="${task.completed ? 'Mark as Active' : 'Mark as Complete'}">
                                 <svg viewBox="0 0 24 24" fill="none">
                                     <path d="M9 11L12 14L22 4" stroke="currentColor" stroke-width="2"/>
                                 </svg>
                             </button>
-                            <button class="task-btn" onclick="app.deleteTask(${task.id})" title="Delete Task">
+                            <button class="btn-icon delete" onclick="app.deleteTask(${task.id})" data-tooltip="Delete Task">
                                 <svg viewBox="0 0 24 24" fill="none">
                                     <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2"/>
                                 </svg>
@@ -177,6 +285,9 @@ class AlphaAgent {
                         <span class="priority-badge priority-${task.priority}">
                             ${task.priority.toUpperCase()}
                         </span>
+                    </div>
+                    <div class="task-progress">
+                        <div class="task-progress-bar" style="width: ${Math.min(progress, 100)}%"></div>
                     </div>
                 </div>
             `;
@@ -197,6 +308,7 @@ class AlphaAgent {
             this.saveToStorage('tasks', this.tasks);
             this.renderTasks();
             this.updateHeaderStats();
+            this.showSuccess(task.completed ? 'Task marked as complete!' : 'Task marked as active!');
         }
     }
 
@@ -206,6 +318,7 @@ class AlphaAgent {
             this.saveToStorage('tasks', this.tasks);
             this.renderTasks();
             this.updateHeaderStats();
+            this.showSuccess('Task deleted successfully!');
         }
     }
 
@@ -234,6 +347,7 @@ class AlphaAgent {
         this.renderTasks();
         this.closeAllModals();
         this.updateHeaderStats();
+        this.showSuccess('Time entry logged successfully!');
     }
 
     renderTimeEntries() {
@@ -278,7 +392,7 @@ class AlphaAgent {
                             <span class="time-stat-label">Revenue</span>
                             <span class="time-stat-value">$${revenue}</span>
                         </div>
-                        <button class="task-btn" onclick="app.deleteTimeEntry(${entry.id})">
+                        <button class="btn-icon delete" onclick="app.deleteTimeEntry(${entry.id})" data-tooltip="Delete Entry">
                             <svg viewBox="0 0 24 24" fill="none">
                                 <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2"/>
                             </svg>
@@ -296,6 +410,7 @@ class AlphaAgent {
             this.renderTimeEntries();
             this.renderTasks();
             this.updateHeaderStats();
+            this.showSuccess('Time entry deleted successfully!');
         }
     }
 
@@ -303,16 +418,32 @@ class AlphaAgent {
     handleClientSubmit(e) {
         e.preventDefault();
 
-        const client = {
-            id: Date.now(),
+        const clientId = document.getElementById('clientId').value;
+        const clientData = {
             name: document.getElementById('clientName').value,
             email: document.getElementById('clientEmail').value,
             hourlyRate: parseFloat(document.getElementById('clientRate').value),
-            projectType: document.getElementById('clientProject').value,
-            createdAt: new Date().toISOString()
+            projectType: document.getElementById('clientProject').value
         };
 
-        this.clients.unshift(client);
+        if (clientId) {
+            // Update existing client
+            const client = this.clients.find(c => c.id === parseInt(clientId));
+            if (client) {
+                Object.assign(client, clientData);
+                this.showSuccess('Client updated successfully!');
+            }
+        } else {
+            // Create new client
+            const client = {
+                id: Date.now(),
+                ...clientData,
+                createdAt: new Date().toISOString()
+            };
+            this.clients.unshift(client);
+            this.showSuccess('Client created successfully!');
+        }
+
         this.saveToStorage('clients', this.clients);
         this.renderClients();
         this.populateClientSelects();
@@ -348,8 +479,25 @@ class AlphaAgent {
 
             return `
                 <div class="client-card">
-                    <h3>${client.name}</h3>
-                    <div class="client-email">${client.email || 'No email'}</div>
+                    <div class="client-card-header">
+                        <div class="client-card-info">
+                            <h3>${client.name}</h3>
+                            <div class="client-email">${client.email || 'No email'}</div>
+                        </div>
+                        <div class="client-card-actions">
+                            <button class="btn-icon edit" onclick="app.openClientModal(${client.id})" data-tooltip="Edit Client">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <path d="M11 4H4C3.46957 4 2.96086 4.21071 2.58579 4.58579C2.21071 4.96086 2 5.46957 2 6V20C2 20.5304 2.21071 21.0391 2.58579 21.4142C2.96086 21.7893 3.46957 22 4 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V13" stroke="currentColor" stroke-width="2"/>
+                                    <path d="M18.5 2.5C18.8978 2.10217 19.4374 1.87868 20 1.87868C20.5626 1.87868 21.1022 2.10217 21.5 2.5C21.8978 2.89783 22.1213 3.43739 22.1213 4C22.1213 4.56261 21.8978 5.10217 21.5 5.5L12 15L8 16L9 12L18.5 2.5Z" stroke="currentColor" stroke-width="2"/>
+                                </svg>
+                            </button>
+                            <button class="btn-icon delete" onclick="app.deleteClient(${client.id})" data-tooltip="Delete Client">
+                                <svg viewBox="0 0 24 24" fill="none">
+                                    <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
                     <div class="client-stats">
                         <div class="client-stat">
                             <span class="client-stat-label">Hourly Rate</span>
@@ -373,7 +521,23 @@ class AlphaAgent {
         }).join('');
     }
 
-    // Reports Generation
+    deleteClient(clientId) {
+        const clientTasks = this.tasks.filter(t => t.clientId === clientId);
+        if (clientTasks.length > 0) {
+            alert('Cannot delete client with active tasks. Please delete or reassign the tasks first.');
+            return;
+        }
+
+        if (confirm('Are you sure you want to delete this client?')) {
+            this.clients = this.clients.filter(c => c.id !== clientId);
+            this.saveToStorage('clients', this.clients);
+            this.renderClients();
+            this.populateClientSelects();
+            this.showSuccess('Client deleted successfully!');
+        }
+    }
+
+    // Reports Generation with Charts
     generateReport() {
         const container = document.getElementById('reportsContainer');
         const weekData = this.getWeekData();
@@ -406,6 +570,21 @@ class AlphaAgent {
                     </div>
                 </div>
 
+                <div class="charts-grid">
+                    <div class="chart-container">
+                        <div class="chart-title">Daily Hours</div>
+                        <div class="chart-wrapper">
+                            <canvas id="dailyChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <div class="chart-title">Revenue by Client</div>
+                        <div class="chart-wrapper">
+                            <canvas id="clientChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="report-section">
                     <h3>Work by Client</h3>
                     <div class="report-list">
@@ -413,18 +592,6 @@ class AlphaAgent {
                             <div class="report-list-item">
                                 <span>${item.client}</span>
                                 <span>${item.hours.toFixed(1)}h ($${item.revenue.toFixed(2)})</span>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-
-                <div class="report-section">
-                    <h3>Daily Breakdown</h3>
-                    <div class="report-list">
-                        ${weekData.dailyBreakdown.map(item => `
-                            <div class="report-list-item">
-                                <span>${item.day}</span>
-                                <span>${item.hours.toFixed(1)}h</span>
                             </div>
                         `).join('')}
                     </div>
@@ -443,6 +610,119 @@ class AlphaAgent {
                 </div>
             </div>
         `;
+
+        // Render Charts
+        setTimeout(() => {
+            this.renderDailyChart(weekData.dailyBreakdown);
+            this.renderClientChart(weekData.clientBreakdown);
+        }, 100);
+    }
+
+    renderDailyChart(dailyData) {
+        const ctx = document.getElementById('dailyChart');
+        if (!ctx) return;
+
+        // Destroy existing chart
+        if (this.charts.daily) {
+            this.charts.daily.destroy();
+        }
+
+        this.charts.daily = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: dailyData.map(d => d.day),
+                datasets: [{
+                    label: 'Hours',
+                    data: dailyData.map(d => d.hours),
+                    backgroundColor: 'rgba(99, 102, 241, 0.5)',
+                    borderColor: 'rgba(99, 102, 241, 1)',
+                    borderWidth: 2,
+                    borderRadius: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#cbd5e1'
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            color: '#cbd5e1'
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    renderClientChart(clientData) {
+        const ctx = document.getElementById('clientChart');
+        if (!ctx) return;
+
+        // Destroy existing chart
+        if (this.charts.client) {
+            this.charts.client.destroy();
+        }
+
+        const colors = [
+            'rgba(99, 102, 241, 0.8)',
+            'rgba(139, 92, 246, 0.8)',
+            'rgba(236, 72, 153, 0.8)',
+            'rgba(245, 158, 11, 0.8)',
+            'rgba(16, 185, 129, 0.8)'
+        ];
+
+        this.charts.client = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: clientData.map(c => c.client),
+                datasets: [{
+                    data: clientData.map(c => c.revenue),
+                    backgroundColor: colors,
+                    borderWidth: 2,
+                    borderColor: '#1e293b'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            color: '#cbd5e1',
+                            padding: 15,
+                            font: {
+                                size: 12
+                            }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.label + ': $' + context.parsed.toFixed(2);
+                            }
+                        }
+                    }
+                }
+            }
+        });
     }
 
     getWeekData() {
@@ -539,11 +819,112 @@ class AlphaAgent {
         };
     }
 
-    // AI Insights Generation
-    generateInsights() {
+    // AI Insights Generation using Gemini API
+    async generateAIInsights() {
         const container = document.getElementById('aiInsights');
-        const weekData = this.getWeekData();
+        const btn = document.getElementById('refreshInsightsBtn');
+
+        // Show loading state
+        btn.classList.add('btn-loading');
+        btn.disabled = true;
+        container.innerHTML = `
+            <div class="ai-loading">
+                <div class="loading"></div>
+                <div class="ai-loading-text">Generating AI insights with Gemini...</div>
+            </div>
+        `;
+
+        try {
+            const weekData = this.getWeekData();
+            const activeTasks = this.tasks.filter(t => !t.completed);
+
+            // Create a comprehensive prompt for Gemini
+            const prompt = `Analyze this work data and provide 3-5 specific, actionable insights in JSON format:
+
+Weekly Stats:
+- Total Hours: ${weekData.totalHours.toFixed(1)}h
+- Average Daily Hours: ${weekData.avgDailyHours.toFixed(1)}h
+- Total Revenue: $${weekData.totalRevenue.toFixed(2)}
+- Tasks Completed: ${weekData.completedTasks}
+- Active Tasks: ${activeTasks.length}
+
+Client Breakdown:
+${weekData.clientBreakdown.map(c => `- ${c.client}: ${c.hours.toFixed(1)}h, $${c.revenue.toFixed(2)}`).join('\n')}
+
+Daily Hours:
+${weekData.dailyBreakdown.map(d => `- ${d.day}: ${d.hours.toFixed(1)}h`).join('\n')}
+
+Please provide insights as a JSON array with this structure:
+[
+  {
+    "type": "optimization" | "warning" | "suggestion",
+    "title": "Clear, concise title",
+    "description": "Detailed, actionable insight (2-3 sentences)",
+    "actions": ["Action 1", "Action 2"]
+  }
+]
+
+Focus on:
+1. Workload balance (overwork/underutilization)
+2. Revenue optimization opportunities
+3. Task completion patterns
+4. Work distribution across the week
+5. Upcoming week planning suggestions`;
+
+            // Call Gemini API
+            const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [{
+                            text: prompt
+                        }]
+                    }]
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to get AI insights');
+            }
+
+            const data = await response.json();
+            const aiText = data.candidates[0].content.parts[0].text;
+
+            // Extract JSON from response (handle markdown code blocks)
+            let insights;
+            try {
+                const jsonMatch = aiText.match(/\[[\s\S]*\]/);
+                if (jsonMatch) {
+                    insights = JSON.parse(jsonMatch[0]);
+                } else {
+                    insights = JSON.parse(aiText);
+                }
+            } catch (e) {
+                // If JSON parsing fails, create insights from the rule-based system
+                insights = this.generateRuleBasedInsights(weekData);
+            }
+
+            // Render insights
+            this.renderInsights(insights);
+
+        } catch (error) {
+            console.error('Error generating AI insights:', error);
+            // Fallback to rule-based insights
+            const weekData = this.getWeekData();
+            const insights = this.generateRuleBasedInsights(weekData);
+            this.renderInsights(insights);
+        } finally {
+            btn.classList.remove('btn-loading');
+            btn.disabled = false;
+        }
+    }
+
+    generateRuleBasedInsights(weekData) {
         const insights = [];
+        const activeTasks = this.tasks.filter(t => !t.completed);
 
         // Workload Analysis
         if (weekData.avgDailyHours > 8) {
@@ -553,7 +934,7 @@ class AlphaAgent {
                 description: `You're averaging ${weekData.avgDailyHours.toFixed(1)} hours per day this week, which is above the recommended 8 hours. Consider redistributing tasks or extending deadlines to prevent burnout.`,
                 actions: ['View task distribution', 'Schedule break time']
             });
-        } else if (weekData.avgDailyHours < 4) {
+        } else if (weekData.avgDailyHours < 4 && weekData.avgDailyHours > 0) {
             insights.push({
                 type: 'suggestion',
                 title: 'Capacity Available',
@@ -562,26 +943,12 @@ class AlphaAgent {
             });
         }
 
-        // Weekend Planning
-        const today = new Date().getDay();
-        if (today >= 5) { // Friday or weekend
-            const activeTasks = this.tasks.filter(t => !t.completed);
-            if (activeTasks.length > 0) {
-                insights.push({
-                    type: 'suggestion',
-                    title: 'Weekend Planning',
-                    description: `You have ${activeTasks.length} active tasks. Consider planning light work for the weekend or schedule them for next week. Work-life balance is important!`,
-                    actions: ['Schedule for Monday', 'Mark low priority']
-                });
-            }
-        }
-
-        // Client Revenue Optimization
-        if (weekData.clientBreakdown.length > 0) {
+        // Revenue Optimization
+        if (weekData.clientBreakdown.length > 1) {
             const highestRevenue = weekData.clientBreakdown[0];
             const lowestRevenue = weekData.clientBreakdown[weekData.clientBreakdown.length - 1];
 
-            if (highestRevenue.revenue > lowestRevenue.revenue * 3) {
+            if (highestRevenue.revenue > lowestRevenue.revenue * 2) {
                 insights.push({
                     type: 'optimization',
                     title: 'Revenue Optimization Opportunity',
@@ -603,7 +970,7 @@ class AlphaAgent {
                 description: `Only ${completionRate.toFixed(0)}% of your tasks are completed. Focus on finishing existing tasks before starting new ones. Break down large tasks into smaller, manageable pieces.`,
                 actions: ['Review task priorities', 'Break down tasks']
             });
-        } else if (completionRate > 80) {
+        } else if (completionRate > 80 && totalTasks > 3) {
             insights.push({
                 type: 'optimization',
                 title: 'Excellent Progress!',
@@ -612,24 +979,40 @@ class AlphaAgent {
             });
         }
 
-        // Upcoming Week Suggestions
-        const upcomingWeekInsight = this.generateUpcomingWeekPlan(weekData);
-        if (upcomingWeekInsight) {
-            insights.push(upcomingWeekInsight);
-        }
+        // Upcoming Week Planning
+        if (activeTasks.length > 0) {
+            const totalEstimatedHours = activeTasks.reduce((sum, t) => {
+                const spent = parseFloat(this.getTaskTimeSpent(t.id));
+                return sum + Math.max(0, t.estimatedHours - spent);
+            }, 0);
 
-        // Time Distribution
-        const hoursVariance = this.calculateDailyVariance(weekData.dailyBreakdown);
-        if (hoursVariance > 3) {
+            const recommendedDailyHours = Math.min(8, totalEstimatedHours / 5);
+
             insights.push({
-                type: 'optimization',
-                title: 'Uneven Work Distribution',
-                description: 'Your daily work hours vary significantly. Try to distribute work more evenly throughout the week for better consistency and reduced stress.',
-                actions: ['Balance schedule', 'Set daily limits']
+                type: 'suggestion',
+                title: 'Upcoming Week Plan',
+                description: `You have ${activeTasks.length} active tasks with approximately ${totalEstimatedHours.toFixed(1)} hours of work remaining. Aim for ${recommendedDailyHours.toFixed(1)} hours per day to complete them by week's end.`,
+                actions: ['View task schedule', 'Set daily goals', 'Review priorities']
             });
         }
 
-        // Render insights
+        // Weekend Planning
+        const today = new Date().getDay();
+        if (today >= 5) {
+            insights.push({
+                type: 'suggestion',
+                title: 'Weekend Planning',
+                description: `It's time to plan for the weekend! ${activeTasks.length > 0 ? `You have ${activeTasks.length} active tasks.` : 'Great job completing everything!'} Consider balancing work and rest for optimal productivity.`,
+                actions: ['Schedule light work', 'Plan leisure time', 'Review next week']
+            });
+        }
+
+        return insights;
+    }
+
+    renderInsights(insights) {
+        const container = document.getElementById('aiInsights');
+
         if (insights.length === 0) {
             container.innerHTML = `
                 <div class="empty-state">
@@ -666,40 +1049,6 @@ class AlphaAgent {
                 </div>
             </div>
         `).join('');
-    }
-
-    generateUpcomingWeekPlan(currentWeekData) {
-        const activeTasks = this.tasks.filter(t => !t.completed);
-
-        if (activeTasks.length === 0) {
-            return {
-                type: 'suggestion',
-                title: 'Plan Your Upcoming Week',
-                description: 'You have no active tasks! Great job completing everything. Take this time to plan new projects, learn new skills, or take a well-deserved break.',
-                actions: ['Create new tasks', 'Review goals', 'Schedule planning time']
-            };
-        }
-
-        const totalEstimatedHours = activeTasks.reduce((sum, t) => {
-            const spent = parseFloat(this.getTaskTimeSpent(t.id));
-            return sum + Math.max(0, t.estimatedHours - spent);
-        }, 0);
-
-        const recommendedDailyHours = Math.min(8, totalEstimatedHours / 5);
-
-        return {
-            type: 'suggestion',
-            title: 'Upcoming Week Plan',
-            description: `You have ${activeTasks.length} active tasks with approximately ${totalEstimatedHours.toFixed(1)} hours of work remaining. Aim for ${recommendedDailyHours.toFixed(1)} hours per day to complete them by week's end. Prioritize ${activeTasks.filter(t => t.priority === 'high').length} high-priority tasks first.`,
-            actions: ['View task schedule', 'Set daily goals', 'Review priorities']
-        };
-    }
-
-    calculateDailyVariance(dailyBreakdown) {
-        const hours = dailyBreakdown.map(d => d.hours);
-        const avg = hours.reduce((a, b) => a + b, 0) / hours.length;
-        const variance = hours.reduce((sum, h) => sum + Math.pow(h - avg, 2), 0) / hours.length;
-        return Math.sqrt(variance);
     }
 
     // Header Stats Update
@@ -762,7 +1111,6 @@ const app = new AlphaAgent();
 
 // Add demo data if storage is empty
 if (app.clients.length === 0) {
-    // Add sample clients
     const sampleClients = [
         {
             id: Date.now() + 1,
@@ -779,13 +1127,20 @@ if (app.clients.length === 0) {
             hourlyRate: 120,
             projectType: 'Mobile App',
             createdAt: new Date().toISOString()
+        },
+        {
+            id: Date.now() + 3,
+            name: 'Creative Studios',
+            email: 'info@creativestudios.com',
+            hourlyRate: 100,
+            projectType: 'UI/UX Design',
+            createdAt: new Date().toISOString()
         }
     ];
 
     app.clients = sampleClients;
     app.saveToStorage('clients', app.clients);
 
-    // Add sample tasks
     const sampleTasks = [
         {
             id: Date.now() + 10,
@@ -816,16 +1171,27 @@ if (app.clients.length === 0) {
             estimatedHours: 6,
             completed: true,
             createdAt: new Date().toISOString()
+        },
+        {
+            id: Date.now() + 13,
+            title: 'Landing page design',
+            description: 'Create modern landing page with animations',
+            clientId: sampleClients[2].id,
+            priority: 'low',
+            estimatedHours: 5,
+            completed: false,
+            createdAt: new Date().toISOString()
         }
     ];
 
     app.tasks = sampleTasks;
     app.saveToStorage('tasks', app.tasks);
 
-    // Add sample time entries
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
+    const twoDaysAgo = new Date(today);
+    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
 
     const sampleTimeEntries = [
         {
@@ -843,13 +1209,28 @@ if (app.clients.length === 0) {
             hours: 5.5,
             notes: 'Created wireframes and color schemes',
             createdAt: new Date().toISOString()
+        },
+        {
+            id: Date.now() + 22,
+            taskId: sampleTasks[2].id,
+            date: twoDaysAgo.toISOString().split('T')[0],
+            hours: 6,
+            notes: 'Completed payment gateway integration',
+            createdAt: new Date().toISOString()
+        },
+        {
+            id: Date.now() + 23,
+            taskId: sampleTasks[3].id,
+            date: twoDaysAgo.toISOString().split('T')[0],
+            hours: 3,
+            notes: 'Initial design concepts',
+            createdAt: new Date().toISOString()
         }
     ];
 
     app.timeEntries = sampleTimeEntries;
     app.saveToStorage('timeEntries', app.timeEntries);
 
-    // Re-render with sample data
     app.renderAll();
     app.updateHeaderStats();
 }
