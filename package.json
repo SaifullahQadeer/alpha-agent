@@ -2,12 +2,11 @@
   "name": "securechat",
   "version": "1.0.0",
   "description": "End-to-End Encrypted Chat Application with SQL Database",
-  "main": "server.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js",
-    "build": "npm install",
-    "init-db": "node database/init.js"
+    "start": "node index.js",
+    "dev": "node index.js",
+    "build": "npm install"
   },
   "engines": {
     "node": ">=18.0.0"
