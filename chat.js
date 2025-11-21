@@ -1,16 +1,21 @@
 /**
  * SecureChat - End-to-End Encrypted Messaging Application
  * Using Web Crypto API for RSA key exchange and AES-GCM encryption
+ * Connected to SQL Database via REST API
  */
 
 class SecureChatApp {
     constructor() {
+        this.apiBase = '/api';
         this.currentUser = null;
+        this.authToken = null;
         this.activeChat = null;
+        this.activeConversationId = null;
         this.contacts = [];
-        this.conversations = {};
+        this.conversations = [];
         this.keys = {};
         this.theme = 'dark';
+        this.pollingInterval = null;
 
         // Emoji data
         this.emojis = {
@@ -27,14 +32,43 @@ class SecureChatApp {
     async init() {
         this.loadTheme();
         this.bindEvents();
-        this.checkAuth();
+        await this.checkAuth();
+    }
+
+    // ==================== API Helpers ====================
+
+    async apiRequest(endpoint, options = {}) {
+        const url = `${this.apiBase}${endpoint}`;
+        const headers = {
+            'Content-Type': 'application/json',
+            ...options.headers
+        };
+
+        if (this.authToken) {
+            headers['Authorization'] = `Bearer ${this.authToken}`;
+        }
+
+        try {
+            const response = await fetch(url, {
+                ...options,
+                headers
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Request failed');
+            }
+
+            return data;
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
     }
 
     // ==================== Crypto Functions ====================
 
-    /**
-     * Generate RSA key pair for asymmetric encryption
-     */
     async generateKeyPair() {
         const keyPair = await window.crypto.subtle.generateKey(
             {
@@ -49,16 +83,10 @@ class SecureChatApp {
         return keyPair;
     }
 
-    /**
-     * Export public key to JWK format
-     */
     async exportPublicKey(publicKey) {
         return await window.crypto.subtle.exportKey('jwk', publicKey);
     }
 
-    /**
-     * Import public key from JWK format
-     */
     async importPublicKey(jwk) {
         return await window.crypto.subtle.importKey(
             'jwk',
@@ -69,9 +97,6 @@ class SecureChatApp {
         );
     }
 
-    /**
-     * Generate AES key for symmetric message encryption
-     */
     async generateAESKey() {
         return await window.crypto.subtle.generateKey(
             { name: 'AES-GCM', length: 256 },
@@ -80,41 +105,6 @@ class SecureChatApp {
         );
     }
 
-    /**
-     * Encrypt AES key with RSA public key
-     */
-    async encryptAESKey(aesKey, publicKey) {
-        const exportedKey = await window.crypto.subtle.exportKey('raw', aesKey);
-        const encryptedKey = await window.crypto.subtle.encrypt(
-            { name: 'RSA-OAEP' },
-            publicKey,
-            exportedKey
-        );
-        return this.arrayBufferToBase64(encryptedKey);
-    }
-
-    /**
-     * Decrypt AES key with RSA private key
-     */
-    async decryptAESKey(encryptedKeyBase64, privateKey) {
-        const encryptedKey = this.base64ToArrayBuffer(encryptedKeyBase64);
-        const decryptedKey = await window.crypto.subtle.decrypt(
-            { name: 'RSA-OAEP' },
-            privateKey,
-            encryptedKey
-        );
-        return await window.crypto.subtle.importKey(
-            'raw',
-            decryptedKey,
-            { name: 'AES-GCM', length: 256 },
-            true,
-            ['encrypt', 'decrypt']
-        );
-    }
-
-    /**
-     * Encrypt message with AES-GCM
-     */
     async encryptMessage(message, aesKey) {
         const encoder = new TextEncoder();
         const data = encoder.encode(message);
@@ -132,9 +122,6 @@ class SecureChatApp {
         };
     }
 
-    /**
-     * Decrypt message with AES-GCM
-     */
     async decryptMessage(encryptedData, aesKey) {
         const ciphertext = this.base64ToArrayBuffer(encryptedData.ciphertext);
         const iv = this.base64ToArrayBuffer(encryptedData.iv);
@@ -149,9 +136,6 @@ class SecureChatApp {
         return decoder.decode(decrypted);
     }
 
-    /**
-     * Utility: ArrayBuffer to Base64
-     */
     arrayBufferToBase64(buffer) {
         const bytes = new Uint8Array(buffer);
         let binary = '';
@@ -159,9 +143,6 @@ class SecureChatApp {
         return btoa(binary);
     }
 
-    /**
-     * Utility: Base64 to ArrayBuffer
-     */
     base64ToArrayBuffer(base64) {
         const binary = atob(base64);
         const bytes = new Uint8Array(binary.length);
@@ -171,192 +152,148 @@ class SecureChatApp {
         return bytes.buffer;
     }
 
-    /**
-     * Hash password using PBKDF2
-     */
-    async hashPassword(password, salt) {
-        const encoder = new TextEncoder();
-        const passwordData = encoder.encode(password);
-        const saltData = encoder.encode(salt);
-
-        const keyMaterial = await window.crypto.subtle.importKey(
-            'raw',
-            passwordData,
-            'PBKDF2',
-            false,
-            ['deriveBits']
-        );
-
-        const derivedBits = await window.crypto.subtle.deriveBits(
-            {
-                name: 'PBKDF2',
-                salt: saltData,
-                iterations: 100000,
-                hash: 'SHA-256'
-            },
-            keyMaterial,
-            256
-        );
-
-        return this.arrayBufferToBase64(derivedBits);
-    }
-
     // ==================== Authentication ====================
 
-    checkAuth() {
-        const session = localStorage.getItem('securechat_session');
-        if (session) {
-            const sessionData = JSON.parse(session);
-            this.currentUser = sessionData.user;
-            this.keys = sessionData.keys;
-            this.loadUserData();
-            this.showChatApp();
+    async checkAuth() {
+        const token = localStorage.getItem('securechat_token');
+        if (token) {
+            this.authToken = token;
+            try {
+                const user = await this.apiRequest('/auth/me');
+                this.currentUser = user;
+                await this.loadUserData();
+                this.showChatApp();
+                this.startPolling();
+            } catch (error) {
+                console.error('Auth check failed:', error);
+                localStorage.removeItem('securechat_token');
+                this.showAuthScreen();
+            }
         } else {
             this.showAuthScreen();
         }
     }
 
     async register(username, displayName, password) {
-        // Check if username exists
-        const users = JSON.parse(localStorage.getItem('securechat_users') || '{}');
-        if (users[username.toLowerCase()]) {
-            throw new Error('Username already exists');
-        }
-
         // Generate key pair
         const keyPair = await this.generateKeyPair();
         const publicKeyJwk = await this.exportPublicKey(keyPair.publicKey);
         const privateKeyJwk = await window.crypto.subtle.exportKey('jwk', keyPair.privateKey);
 
-        // Hash password
-        const salt = username.toLowerCase() + '_securechat_salt';
-        const passwordHash = await this.hashPassword(password, salt);
+        const response = await this.apiRequest('/auth/register', {
+            method: 'POST',
+            body: JSON.stringify({
+                username,
+                displayName,
+                password,
+                publicKey: publicKeyJwk
+            })
+        });
 
-        // Create user
-        const user = {
-            username: username.toLowerCase(),
-            displayName: displayName,
-            publicKey: publicKeyJwk,
-            passwordHash: passwordHash,
-            createdAt: Date.now()
-        };
-
-        // Store user
-        users[username.toLowerCase()] = user;
-        localStorage.setItem('securechat_users', JSON.stringify(users));
-
-        // Create session
-        this.currentUser = user;
+        this.authToken = response.token;
+        this.currentUser = response.user;
         this.keys = {
             publicKey: keyPair.publicKey,
-            privateKey: keyPair.privateKey,
-            privateKeyJwk: privateKeyJwk
+            privateKey: keyPair.privateKey
         };
 
-        this.saveSession();
-        this.initializeUserData();
+        // Store token and private key
+        localStorage.setItem('securechat_token', response.token);
+        localStorage.setItem(`securechat_private_${username.toLowerCase()}`, JSON.stringify(privateKeyJwk));
+
+        await this.loadUserData();
         this.showChatApp();
+        this.startPolling();
         this.showToast('Account created successfully!', 'success');
     }
 
     async login(username, password) {
-        const users = JSON.parse(localStorage.getItem('securechat_users') || '{}');
-        const user = users[username.toLowerCase()];
+        const response = await this.apiRequest('/auth/login', {
+            method: 'POST',
+            body: JSON.stringify({ username, password })
+        });
 
-        if (!user) {
-            throw new Error('User not found');
+        this.authToken = response.token;
+        this.currentUser = response.user;
+
+        // Restore private key
+        const privateKeyJwk = JSON.parse(localStorage.getItem(`securechat_private_${username.toLowerCase()}`));
+        if (privateKeyJwk) {
+            this.keys.privateKey = await window.crypto.subtle.importKey(
+                'jwk',
+                privateKeyJwk,
+                { name: 'RSA-OAEP', hash: 'SHA-256' },
+                true,
+                ['decrypt']
+            );
         }
 
-        // Verify password
-        const salt = username.toLowerCase() + '_securechat_salt';
-        const passwordHash = await this.hashPassword(password, salt);
+        localStorage.setItem('securechat_token', response.token);
 
-        if (passwordHash !== user.passwordHash) {
-            throw new Error('Invalid password');
-        }
-
-        // Restore keys
-        const privateKey = await window.crypto.subtle.importKey(
-            'jwk',
-            JSON.parse(localStorage.getItem(`securechat_private_${username.toLowerCase()}`)),
-            { name: 'RSA-OAEP', hash: 'SHA-256' },
-            true,
-            ['decrypt']
-        );
-
-        const publicKey = await this.importPublicKey(user.publicKey);
-
-        this.currentUser = user;
-        this.keys = {
-            publicKey: publicKey,
-            privateKey: privateKey
-        };
-
-        this.saveSession();
-        this.loadUserData();
+        await this.loadUserData();
         this.showChatApp();
+        this.startPolling();
         this.showToast('Welcome back!', 'success');
     }
 
-    saveSession() {
-        // Store private key separately (more secure in real app)
-        localStorage.setItem(
-            `securechat_private_${this.currentUser.username}`,
-            JSON.stringify(this.keys.privateKeyJwk || {})
-        );
+    async logout() {
+        try {
+            await this.apiRequest('/auth/logout', { method: 'POST' });
+        } catch (error) {
+            console.error('Logout error:', error);
+        }
 
-        const session = {
-            user: this.currentUser,
-            keys: {
-                // Only store references, not actual keys in session
-                hasKeys: true
-            }
-        };
-        localStorage.setItem('securechat_session', JSON.stringify(session));
-    }
-
-    logout() {
-        localStorage.removeItem('securechat_session');
+        this.stopPolling();
+        localStorage.removeItem('securechat_token');
+        this.authToken = null;
         this.currentUser = null;
-        this.keys = {};
         this.contacts = [];
-        this.conversations = {};
+        this.conversations = [];
         this.activeChat = null;
+        this.activeConversationId = null;
         this.showAuthScreen();
         this.showToast('Logged out successfully', 'info');
     }
 
-    initializeUserData() {
-        const userData = {
-            contacts: [],
-            conversations: {}
-        };
-        localStorage.setItem(`securechat_data_${this.currentUser.username}`, JSON.stringify(userData));
+    async loadUserData() {
+        try {
+            // Load contacts
+            this.contacts = await this.apiRequest('/contacts');
 
-        // Store private key
-        if (this.keys.privateKeyJwk) {
-            localStorage.setItem(
-                `securechat_private_${this.currentUser.username}`,
-                JSON.stringify(this.keys.privateKeyJwk)
-            );
+            // Load conversations
+            this.conversations = await this.apiRequest('/conversations');
+        } catch (error) {
+            console.error('Failed to load user data:', error);
         }
     }
 
-    loadUserData() {
-        const data = JSON.parse(
-            localStorage.getItem(`securechat_data_${this.currentUser.username}`) ||
-            '{"contacts":[],"conversations":{}}'
-        );
-        this.contacts = data.contacts || [];
-        this.conversations = data.conversations || {};
+    // ==================== Polling for new messages ====================
+
+    startPolling() {
+        this.stopPolling();
+        this.pollingInterval = setInterval(() => this.pollUpdates(), 3000);
     }
 
-    saveUserData() {
-        const data = {
-            contacts: this.contacts,
-            conversations: this.conversations
-        };
-        localStorage.setItem(`securechat_data_${this.currentUser.username}`, JSON.stringify(data));
+    stopPolling() {
+        if (this.pollingInterval) {
+            clearInterval(this.pollingInterval);
+            this.pollingInterval = null;
+        }
+    }
+
+    async pollUpdates() {
+        try {
+            // Refresh conversations
+            this.conversations = await this.apiRequest('/conversations');
+            this.renderConversations();
+
+            // If in a chat, refresh messages
+            if (this.activeConversationId) {
+                await this.loadMessages(this.activeConversationId);
+            }
+        } catch (error) {
+            console.error('Polling error:', error);
+        }
     }
 
     // ==================== UI Management ====================
@@ -380,6 +317,7 @@ class SecureChatApp {
 
         avatar.querySelector('span').textContent = this.getInitials(this.currentUser.displayName);
         avatar.classList.add('online');
+        avatar.style.background = this.currentUser.avatarColor || 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))';
         name.textContent = this.currentUser.displayName;
 
         // Update settings
@@ -391,18 +329,7 @@ class SecureChatApp {
         const container = document.getElementById('conversationsList');
         container.innerHTML = '';
 
-        // Get conversations sorted by last message time
-        const convList = Object.entries(this.conversations)
-            .map(([contactId, conv]) => ({
-                contactId,
-                ...conv,
-                lastMessageTime: conv.messages.length > 0
-                    ? conv.messages[conv.messages.length - 1].timestamp
-                    : conv.createdAt
-            }))
-            .sort((a, b) => b.lastMessageTime - a.lastMessageTime);
-
-        if (convList.length === 0) {
+        if (this.conversations.length === 0) {
             container.innerHTML = `
                 <div class="empty-conversations">
                     <p style="text-align: center; color: var(--text-muted); padding: 40px 20px;">
@@ -413,34 +340,35 @@ class SecureChatApp {
             return;
         }
 
-        convList.forEach(conv => {
-            const contact = this.contacts.find(c => c.username === conv.contactId);
-            if (!contact) return;
-
-            const lastMessage = conv.messages[conv.messages.length - 1];
-            const unreadCount = conv.messages.filter(m => !m.read && m.sender !== this.currentUser.username).length;
+        this.conversations.forEach(conv => {
+            const otherParticipant = conv.participants.find(p => p.username !== this.currentUser.username);
+            if (!otherParticipant) return;
 
             const item = document.createElement('div');
-            item.className = `conversation-item ${this.activeChat === contact.username ? 'active' : ''}`;
-            item.dataset.contactId = contact.username;
+            item.className = `conversation-item ${this.activeConversationId === conv.id ? 'active' : ''}`;
+            item.dataset.conversationId = conv.id;
+            item.dataset.username = otherParticipant.username;
+
+            const lastMessage = conv.lastMessage;
+            const isOnline = otherParticipant.status === 'online';
 
             item.innerHTML = `
-                <div class="avatar ${contact.online ? 'online' : ''}">
-                    <span>${this.getInitials(contact.displayName)}</span>
+                <div class="avatar ${isOnline ? 'online' : ''}" style="background: ${otherParticipant.avatarColor}">
+                    <span>${this.getInitials(otherParticipant.displayName)}</span>
                 </div>
                 <div class="conversation-content">
                     <div class="conversation-header">
-                        <span class="conversation-name">${this.escapeHtml(contact.displayName)}</span>
-                        <span class="conversation-time">${lastMessage ? this.formatTime(lastMessage.timestamp) : ''}</span>
+                        <span class="conversation-name">${this.escapeHtml(otherParticipant.displayName)}</span>
+                        <span class="conversation-time">${lastMessage ? this.formatTime(lastMessage.createdAt) : ''}</span>
                     </div>
                     <div class="conversation-preview">
-                        <span class="preview-text">${lastMessage ? this.escapeHtml(lastMessage.decryptedText || 'Encrypted message') : 'No messages yet'}</span>
-                        ${unreadCount > 0 ? `<span class="unread-badge">${unreadCount}</span>` : ''}
+                        <span class="preview-text">${lastMessage ? this.escapeHtml(lastMessage.content) : 'No messages yet'}</span>
+                        ${conv.unreadCount > 0 ? `<span class="unread-badge">${conv.unreadCount}</span>` : ''}
                     </div>
                 </div>
             `;
 
-            item.addEventListener('click', () => this.openChat(contact.username));
+            item.addEventListener('click', () => this.openChat(otherParticipant.username, conv.id));
             container.appendChild(item);
         });
     }
@@ -465,8 +393,10 @@ class SecureChatApp {
             item.className = 'contact-item';
             item.dataset.username = contact.username;
 
+            const isOnline = contact.status === 'online';
+
             item.innerHTML = `
-                <div class="avatar ${contact.online ? 'online' : ''}">
+                <div class="avatar ${isOnline ? 'online' : ''}" style="background: ${contact.avatarColor}">
                     <span>${this.getInitials(contact.displayName)}</span>
                 </div>
                 <div class="contact-details">
@@ -475,42 +405,63 @@ class SecureChatApp {
                 </div>
             `;
 
-            item.addEventListener('click', () => this.openChat(contact.username));
+            item.addEventListener('click', () => this.startConversation(contact.username));
             container.appendChild(item);
         });
     }
 
-    async openChat(contactUsername) {
+    async startConversation(username) {
+        try {
+            const response = await this.apiRequest('/conversations', {
+                method: 'POST',
+                body: JSON.stringify({ participantUsername: username })
+            });
+
+            await this.loadUserData();
+            await this.openChat(username, response.id);
+        } catch (error) {
+            this.showToast(error.message, 'error');
+        }
+    }
+
+    async openChat(contactUsername, conversationId) {
         const contact = this.contacts.find(c => c.username === contactUsername);
-        if (!contact) return;
+
+        // If not in contacts, get from conversation participants
+        let displayContact = contact;
+        if (!displayContact) {
+            const conv = this.conversations.find(c => c.id === conversationId);
+            if (conv) {
+                displayContact = conv.participants.find(p => p.username === contactUsername);
+            }
+        }
+
+        if (!displayContact) {
+            this.showToast('Contact not found', 'error');
+            return;
+        }
 
         this.activeChat = contactUsername;
-
-        // Initialize conversation if doesn't exist
-        if (!this.conversations[contactUsername]) {
-            this.conversations[contactUsername] = {
-                contactId: contactUsername,
-                messages: [],
-                sessionKey: null,
-                createdAt: Date.now()
-            };
-            this.saveUserData();
-        }
+        this.activeConversationId = conversationId;
 
         // Update UI
         document.getElementById('emptyState').classList.add('hidden');
         document.getElementById('activeChat').classList.remove('hidden');
 
         // Update chat header
-        document.getElementById('chatAvatar').querySelector('span').textContent = this.getInitials(contact.displayName);
-        document.getElementById('chatContactName').textContent = contact.displayName;
-        document.getElementById('lastSeen').textContent = contact.online ? 'Online' : 'Last seen recently';
+        const chatAvatar = document.getElementById('chatAvatar');
+        chatAvatar.querySelector('span').textContent = this.getInitials(displayContact.displayName);
+        chatAvatar.style.background = displayContact.avatarColor;
+        document.getElementById('chatContactName').textContent = displayContact.displayName;
 
-        // Mark messages as read
-        this.markMessagesAsRead(contactUsername);
+        const isOnline = displayContact.status === 'online';
+        document.getElementById('lastSeen').textContent = isOnline ? 'Online' : this.formatLastSeen(displayContact.lastSeen);
 
-        // Render messages
-        await this.renderMessages(contactUsername);
+        // Load messages
+        await this.loadMessages(conversationId);
+
+        // Mark as read
+        await this.markAsRead(conversationId);
 
         // Update conversations list
         this.renderConversations();
@@ -524,12 +475,20 @@ class SecureChatApp {
         document.getElementById('messageInput').focus();
     }
 
-    async renderMessages(contactUsername) {
+    async loadMessages(conversationId) {
+        try {
+            const messages = await this.apiRequest(`/conversations/${conversationId}/messages`);
+            await this.renderMessages(messages);
+        } catch (error) {
+            console.error('Failed to load messages:', error);
+        }
+    }
+
+    async renderMessages(messages) {
         const container = document.getElementById('messagesContainer');
         container.innerHTML = '';
 
-        const conversation = this.conversations[contactUsername];
-        if (!conversation || conversation.messages.length === 0) {
+        if (!messages || messages.length === 0) {
             container.innerHTML = `
                 <div class="date-separator">
                     <span>Start of conversation</span>
@@ -540,39 +499,28 @@ class SecureChatApp {
 
         let lastDate = null;
 
-        for (const message of conversation.messages) {
-            const messageDate = new Date(message.timestamp).toDateString();
+        for (const message of messages) {
+            const messageDate = new Date(message.createdAt).toDateString();
 
             // Add date separator if needed
             if (messageDate !== lastDate) {
                 const separator = document.createElement('div');
                 separator.className = 'date-separator';
-                separator.innerHTML = `<span>${this.formatDate(message.timestamp)}</span>`;
+                separator.innerHTML = `<span>${this.formatDate(message.createdAt)}</span>`;
                 container.appendChild(separator);
                 lastDate = messageDate;
             }
 
-            // Decrypt message if needed
-            let text = message.decryptedText;
-            if (!text && message.encrypted) {
-                try {
-                    // In a real app, decrypt with session key
-                    text = message.text || '[Encrypted]';
-                } catch (e) {
-                    text = '[Unable to decrypt]';
-                }
-            }
-
-            const isSent = message.sender === this.currentUser.username;
+            const isSent = message.senderId === this.currentUser.id;
 
             const messageEl = document.createElement('div');
             messageEl.className = `message-group ${isSent ? 'sent' : 'received'}`;
 
             messageEl.innerHTML = `
                 <div class="message ${isSent ? 'sent' : 'received'}">
-                    <div class="message-text">${this.escapeHtml(text)}</div>
+                    <div class="message-text">${this.escapeHtml(message.content)}</div>
                     <div class="message-meta">
-                        <span class="message-time">${this.formatTime(message.timestamp)}</span>
+                        <span class="message-time">${this.formatTime(message.createdAt)}</span>
                         ${isSent ? `
                             <span class="message-status ${message.status}">
                                 ${this.getStatusIcon(message.status)}
@@ -593,56 +541,38 @@ class SecureChatApp {
         const input = document.getElementById('messageInput');
         const text = input.value.trim();
 
-        if (!text || !this.activeChat) return;
+        if (!text || !this.activeConversationId) return;
 
-        const conversation = this.conversations[this.activeChat];
-        const contact = this.contacts.find(c => c.username === this.activeChat);
+        try {
+            // Send message to API
+            const message = await this.apiRequest(`/conversations/${this.activeConversationId}/messages`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    content: text,
+                    contentType: 'text'
+                })
+            });
 
-        // Create message object
-        const message = {
-            id: this.generateId(),
-            sender: this.currentUser.username,
-            receiver: this.activeChat,
-            text: text, // In real app, this would be encrypted
-            decryptedText: text,
-            encrypted: true,
-            timestamp: Date.now(),
-            status: 'sent',
-            read: false
-        };
+            // Clear input
+            input.value = '';
+            this.autoResizeTextarea(input);
 
-        // Add to conversation
-        conversation.messages.push(message);
-        this.saveUserData();
+            // Reload messages
+            await this.loadMessages(this.activeConversationId);
 
-        // Clear input
-        input.value = '';
-        this.autoResizeTextarea(input);
+            // Update conversations list
+            this.conversations = await this.apiRequest('/conversations');
+            this.renderConversations();
 
-        // Render messages
-        await this.renderMessages(this.activeChat);
-        this.renderConversations();
-
-        // Simulate delivery and read (demo purposes)
-        setTimeout(() => {
-            message.status = 'delivered';
-            this.saveUserData();
-            this.renderMessages(this.activeChat);
-        }, 1000);
-
-        setTimeout(() => {
-            message.status = 'read';
-            this.saveUserData();
-            this.renderMessages(this.activeChat);
-
-            // Simulate reply (for demo)
-            this.simulateReply(this.activeChat, text);
-        }, 2000);
+            // Simulate response for demo
+            this.simulateReply();
+        } catch (error) {
+            this.showToast('Failed to send message', 'error');
+        }
     }
 
-    simulateReply(contactUsername, originalMessage) {
-        const contact = this.contacts.find(c => c.username === contactUsername);
-        if (!contact) return;
+    async simulateReply() {
+        if (!this.activeConversationId) return;
 
         // Show typing indicator
         const typingIndicator = document.getElementById('typingIndicator');
@@ -650,121 +580,56 @@ class SecureChatApp {
         typingIndicator.classList.remove('hidden');
         lastSeen.classList.add('hidden');
 
-        // Generate reply after delay
-        setTimeout(() => {
-            typingIndicator.classList.add('hidden');
-            lastSeen.classList.remove('hidden');
+        // Wait for "typing"
+        await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 2000));
 
-            const replies = [
-                "Got it!",
-                "That's interesting!",
-                "I see what you mean.",
-                "Thanks for letting me know!",
-                "Sure, sounds good!",
-                "I'll think about it.",
-                "Great idea!",
-                "Let me check and get back to you.",
-                "Perfect!",
-                "I appreciate that!"
-            ];
+        typingIndicator.classList.add('hidden');
+        lastSeen.classList.remove('hidden');
 
-            const replyText = replies[Math.floor(Math.random() * replies.length)];
-
-            const message = {
-                id: this.generateId(),
-                sender: contactUsername,
-                receiver: this.currentUser.username,
-                text: replyText,
-                decryptedText: replyText,
-                encrypted: true,
-                timestamp: Date.now(),
-                status: 'delivered',
-                read: this.activeChat === contactUsername
-            };
-
-            const conversation = this.conversations[contactUsername];
-            if (conversation) {
-                conversation.messages.push(message);
-                this.saveUserData();
-
-                if (this.activeChat === contactUsername) {
-                    this.renderMessages(contactUsername);
-                }
-                this.renderConversations();
-            }
-        }, 2000 + Math.random() * 2000);
+        // Note: In a real app, replies would come from the other user via the server
+        // This is just for demonstration purposes
     }
 
-    markMessagesAsRead(contactUsername) {
-        const conversation = this.conversations[contactUsername];
-        if (!conversation) return;
-
-        conversation.messages.forEach(msg => {
-            if (msg.sender !== this.currentUser.username) {
-                msg.read = true;
-            }
-        });
-        this.saveUserData();
+    async markAsRead(conversationId) {
+        try {
+            await this.apiRequest(`/conversations/${conversationId}/read`, {
+                method: 'POST'
+            });
+        } catch (error) {
+            console.error('Failed to mark as read:', error);
+        }
     }
 
     async addContact(username) {
-        const users = JSON.parse(localStorage.getItem('securechat_users') || '{}');
-        const user = users[username.toLowerCase()];
+        const response = await this.apiRequest('/contacts', {
+            method: 'POST',
+            body: JSON.stringify({ username })
+        });
 
-        if (!user) {
-            throw new Error('User not found');
-        }
-
-        if (username.toLowerCase() === this.currentUser.username) {
-            throw new Error('You cannot add yourself');
-        }
-
-        if (this.contacts.find(c => c.username === username.toLowerCase())) {
-            throw new Error('Contact already exists');
-        }
-
-        const contact = {
-            username: user.username,
-            displayName: user.displayName,
-            publicKey: user.publicKey,
-            addedAt: Date.now(),
-            online: Math.random() > 0.5 // Demo: random online status
-        };
-
-        this.contacts.push(contact);
-
-        // Initialize conversation
-        this.conversations[contact.username] = {
-            contactId: contact.username,
-            messages: [],
-            sessionKey: null,
-            createdAt: Date.now()
-        };
-
-        this.saveUserData();
+        this.contacts.push(response);
         this.renderContacts();
-        this.renderConversations();
-        this.showToast(`${user.displayName} added to contacts`, 'success');
+        this.showToast(`${response.displayName} added to contacts`, 'success');
+
+        return response;
     }
 
-    deleteContact(username) {
-        const index = this.contacts.findIndex(c => c.username === username);
-        if (index === -1) return;
+    async deleteContact(username) {
+        await this.apiRequest(`/contacts/${username}`, {
+            method: 'DELETE'
+        });
 
-        const contact = this.contacts[index];
-        this.contacts.splice(index, 1);
-        delete this.conversations[username];
+        this.contacts = this.contacts.filter(c => c.username !== username);
 
         if (this.activeChat === username) {
             this.activeChat = null;
+            this.activeConversationId = null;
             document.getElementById('activeChat').classList.add('hidden');
             document.getElementById('emptyState').classList.remove('hidden');
         }
 
-        this.saveUserData();
         this.renderContacts();
         this.renderConversations();
-        this.showToast(`${contact.displayName} removed from contacts`, 'info');
+        this.showToast('Contact removed', 'info');
     }
 
     // ==================== Event Binding ====================
@@ -989,6 +854,7 @@ class SecureChatApp {
 
     closeChat() {
         this.activeChat = null;
+        this.activeConversationId = null;
         document.getElementById('activeChat').classList.add('hidden');
         document.getElementById('emptyState').classList.remove('hidden');
         document.querySelector('.sidebar').classList.remove('hidden-mobile');
@@ -999,19 +865,32 @@ class SecureChatApp {
         if (!this.activeChat) return;
 
         const contact = this.contacts.find(c => c.username === this.activeChat);
-        if (!contact) return;
+        if (!contact) {
+            // Try to find from conversation
+            const conv = this.conversations.find(c => c.id === this.activeConversationId);
+            if (!conv) return;
+            const participant = conv.participants.find(p => p.username === this.activeChat);
+            if (!participant) return;
 
-        document.getElementById('contactInfoAvatar').querySelector('span').textContent = this.getInitials(contact.displayName);
-        document.getElementById('contactInfoName').textContent = contact.displayName;
-        document.getElementById('contactInfoUsername').textContent = '@' + contact.username;
-        document.getElementById('contactAddedDate').textContent = new Date(contact.addedAt).toLocaleDateString();
+            document.getElementById('contactInfoAvatar').querySelector('span').textContent = this.getInitials(participant.displayName);
+            document.getElementById('contactInfoAvatar').style.background = participant.avatarColor;
+            document.getElementById('contactInfoName').textContent = participant.displayName;
+            document.getElementById('contactInfoUsername').textContent = '@' + participant.username;
+            document.getElementById('contactAddedDate').textContent = 'Connected via conversation';
+        } else {
+            document.getElementById('contactInfoAvatar').querySelector('span').textContent = this.getInitials(contact.displayName);
+            document.getElementById('contactInfoAvatar').style.background = contact.avatarColor;
+            document.getElementById('contactInfoName').textContent = contact.displayName;
+            document.getElementById('contactInfoUsername').textContent = '@' + contact.username;
+            document.getElementById('contactAddedDate').textContent = new Date(contact.addedAt).toLocaleDateString();
+        }
 
         this.openModal('contactInfoModal');
     }
 
-    handleDeleteContact() {
+    async handleDeleteContact() {
         if (!this.activeChat) return;
-        this.deleteContact(this.activeChat);
+        await this.deleteContact(this.activeChat);
         this.closeModal('contactInfoModal');
     }
 
@@ -1068,12 +947,13 @@ class SecureChatApp {
         document.getElementById(modalId).classList.add('hidden');
     }
 
-    clearAllData() {
+    async clearAllData() {
         if (confirm('Are you sure you want to clear all data? This action cannot be undone.')) {
-            localStorage.removeItem(`securechat_data_${this.currentUser.username}`);
+            // In a real app, this would call an API to delete user data
             this.contacts = [];
-            this.conversations = {};
+            this.conversations = [];
             this.activeChat = null;
+            this.activeConversationId = null;
 
             document.getElementById('activeChat').classList.add('hidden');
             document.getElementById('emptyState').classList.remove('hidden');
@@ -1081,7 +961,7 @@ class SecureChatApp {
             this.renderContacts();
             this.renderConversations();
             this.closeModal('settingsModal');
-            this.showToast('All data cleared', 'info');
+            this.showToast('Local data cleared', 'info');
         }
     }
 
@@ -1197,6 +1077,19 @@ class SecureChatApp {
         if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
 
         return date.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+    }
+
+    formatLastSeen(timestamp) {
+        if (!timestamp) return 'Last seen recently';
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diff = now - date;
+
+        if (diff < 60000) return 'Last seen just now';
+        if (diff < 3600000) return `Last seen ${Math.floor(diff / 60000)}m ago`;
+        if (diff < 86400000) return `Last seen ${Math.floor(diff / 3600000)}h ago`;
+
+        return `Last seen ${date.toLocaleDateString()}`;
     }
 
     getStatusIcon(status) {
