@@ -1,12 +1,12 @@
 /**
  * SecureChat - End-to-End Encrypted Messaging Application
  * Using Web Crypto API for RSA key exchange and AES-GCM encryption
- * Connected to SQL Database via REST API
+ * Connected to PHP/MySQL Backend via REST API
  */
 
 class SecureChatApp {
     constructor() {
-        this.apiBase = '/api';
+        this.apiBase = 'api';  // PHP API folder
         this.currentUser = null;
         this.authToken = null;
         this.activeChat = null;
@@ -38,7 +38,10 @@ class SecureChatApp {
     // ==================== API Helpers ====================
 
     async apiRequest(endpoint, options = {}) {
-        const url = `${this.apiBase}${endpoint}`;
+        // Convert endpoint to PHP format
+        // e.g., /auth/login -> auth.php?action=login
+        const method = options.method || 'GET';
+        const url = this.convertEndpoint(endpoint, method);
         const headers = {
             'Content-Type': 'application/json',
             ...options.headers
@@ -65,6 +68,61 @@ class SecureChatApp {
             console.error('API Error:', error);
             throw error;
         }
+    }
+
+    convertEndpoint(endpoint, method = 'GET') {
+        // Map REST-style endpoints to PHP query string format
+        const mappings = {
+            '/auth/register': 'auth.php?action=register',
+            '/auth/login': 'auth.php?action=login',
+            '/auth/logout': 'auth.php?action=logout',
+            '/auth/me': 'auth.php?action=me',
+        };
+
+        // Direct mapping
+        if (mappings[endpoint]) {
+            return `${this.apiBase}/${mappings[endpoint]}`;
+        }
+
+        // Handle dynamic endpoints based on method
+
+        // /contacts - GET=list, POST=add, DELETE=delete
+        if (endpoint === '/contacts') {
+            if (method === 'POST') {
+                return `${this.apiBase}/contacts.php?action=add`;
+            }
+            return `${this.apiBase}/contacts.php?action=list`;
+        }
+
+        // /contacts/:username - DELETE
+        if (endpoint.startsWith('/contacts/')) {
+            const username = endpoint.split('/contacts/')[1];
+            return `${this.apiBase}/contacts.php?action=delete&username=${username}`;
+        }
+
+        // /conversations/:id/messages - GET=list, POST=send
+        const msgMatch = endpoint.match(/\/conversations\/(\d+)\/messages/);
+        if (msgMatch) {
+            const action = method === 'POST' ? 'send' : 'list';
+            return `${this.apiBase}/messages.php?action=${action}&conversation_id=${msgMatch[1]}`;
+        }
+
+        // /conversations/:id/read - POST
+        const readMatch = endpoint.match(/\/conversations\/(\d+)\/read/);
+        if (readMatch) {
+            return `${this.apiBase}/messages.php?action=read&conversation_id=${readMatch[1]}`;
+        }
+
+        // /conversations - GET=list, POST=create
+        if (endpoint === '/conversations') {
+            if (method === 'POST') {
+                return `${this.apiBase}/conversations.php?action=create`;
+            }
+            return `${this.apiBase}/conversations.php?action=list`;
+        }
+
+        // Default fallback
+        return `${this.apiBase}${endpoint}`;
     }
 
     // ==================== Crypto Functions ====================
@@ -548,6 +606,7 @@ class SecureChatApp {
             const message = await this.apiRequest(`/conversations/${this.activeConversationId}/messages`, {
                 method: 'POST',
                 body: JSON.stringify({
+                    conversationId: this.activeConversationId,
                     content: text,
                     contentType: 'text'
                 })

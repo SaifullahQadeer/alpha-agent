@@ -1,13 +1,13 @@
 # SecureChat - End-to-End Encrypted Messaging
 
-A professional, real-time chat application with end-to-end encryption, built with Node.js, Express, and SQLite.
+A professional, real-time chat application with end-to-end encryption, built with PHP, MySQL, and vanilla JavaScript.
 
 ## Features
 
 ### Security
 - **End-to-End Encryption**: Messages encrypted using AES-256-GCM
 - **RSA Key Exchange**: 2048-bit RSA-OAEP for secure key exchange
-- **Password Hashing**: bcrypt with 12 rounds for secure password storage
+- **Password Hashing**: bcrypt for secure password storage
 - **Token Authentication**: UUID-based session tokens with 7-day expiry
 
 ### Core Features
@@ -27,11 +27,11 @@ A professional, real-time chat application with end-to-end encryption, built wit
 
 ## Technology Stack
 
-- **Backend**: Node.js with Express.js
-- **Database**: SQLite with better-sqlite3
+- **Backend**: PHP 7.4+ with PDO
+- **Database**: MySQL / MariaDB
 - **Frontend**: Vanilla JavaScript (ES6+)
 - **Styling**: CSS3 with CSS Variables
-- **Authentication**: bcryptjs + UUID tokens
+- **Authentication**: password_hash() + UUID tokens
 - **Encryption**: Web Crypto API
 
 ## Database Schema
@@ -51,80 +51,63 @@ sessions           - Authentication sessions
 ### Authentication
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/auth/register` | Create new account |
-| POST | `/api/auth/login` | User login |
-| POST | `/api/auth/logout` | User logout |
-| GET | `/api/auth/me` | Get current user |
+| POST | `api/auth.php?action=register` | Create new account |
+| POST | `api/auth.php?action=login` | User login |
+| POST | `api/auth.php?action=logout` | User logout |
+| GET | `api/auth.php?action=me` | Get current user |
 
 ### Users
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/users/search?q=` | Search users |
-| GET | `/api/users/:username` | Get user profile |
-| PUT | `/api/users/profile` | Update profile |
+| GET | `api/users.php?action=search&q=` | Search users |
+| GET | `api/users.php?action=get&username=` | Get user profile |
 
 ### Contacts
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/contacts` | List contacts |
-| POST | `/api/contacts` | Add contact |
-| DELETE | `/api/contacts/:username` | Remove contact |
+| GET | `api/contacts.php?action=list` | List contacts |
+| POST | `api/contacts.php?action=add` | Add contact |
+| DELETE | `api/contacts.php?action=delete&username=` | Remove contact |
 
 ### Conversations
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/conversations` | List conversations |
-| POST | `/api/conversations` | Start conversation |
-| GET | `/api/conversations/:id` | Get conversation |
-| GET | `/api/conversations/:id/messages` | Get messages |
-| POST | `/api/conversations/:id/messages` | Send message |
-| POST | `/api/conversations/:id/read` | Mark as read |
+| GET | `api/conversations.php?action=list` | List conversations |
+| POST | `api/conversations.php?action=create` | Start conversation |
+| GET | `api/messages.php?action=list&conversation_id=` | Get messages |
+| POST | `api/messages.php?action=send` | Send message |
+| POST | `api/messages.php?action=read&conversation_id=` | Mark as read |
 
 ## Installation
 
 ### Prerequisites
-- Node.js 18+
-- npm or yarn
+- PHP 7.4+ with PDO extension
+- MySQL 5.7+ or MariaDB 10.3+
+- Web server (Apache/Nginx)
 
-### Local Development
+### Shared Hosting Setup (Hostinger)
 
-1. Clone the repository:
-```bash
-git clone https://github.com/SaifullahQadeer/alpha-agent.git
-cd alpha-agent
-```
+1. **Upload Files**: Upload all files to your `public_html` folder via FTP or File Manager
 
-2. Install dependencies:
-```bash
-npm install
-```
+2. **Create Database**:
+   - Go to phpMyAdmin in Hostinger
+   - Create a new database
+   - Import `database/schema.sql` to create tables
 
-3. Start the server:
-```bash
-npm start
-```
+3. **Configure Database**:
+   - Edit `config/database.php`
+   - Update credentials:
+   ```php
+   define('DB_HOST', 'localhost');
+   define('DB_NAME', 'your_database_name');
+   define('DB_USER', 'your_username');
+   define('DB_PASS', 'your_password');
+   ```
 
-4. Open your browser:
-```
-http://localhost:3000
-```
-
-## Deployment on Hostinger
-
-### Node.js Frontend Web App Setup
-
-1. **Connect Repository**: Link your GitHub repository in Hostinger
-2. **Build Settings**:
-   - Build command: `npm install`
-   - Start command: `npm start`
-3. **Environment**: Node.js 18+
-4. **Port**: The app uses `process.env.PORT` or defaults to 3000
-
-### Environment Variables (Optional)
-```
-PORT=3000
-NODE_ENV=production
-```
+4. **Access the App**:
+   ```
+   https://yourdomain.com/chat.html
+   ```
 
 ## Project Structure
 
@@ -133,10 +116,19 @@ alpha-agent/
 ├── chat.html          # Main chat interface
 ├── chat.css           # Styles and themes
 ├── chat.js            # Frontend application logic
-├── server.js          # Express.js API server
-├── package.json       # Node.js dependencies
+├── api/               # PHP API endpoints
+│   ├── auth.php       # Authentication
+│   ├── contacts.php   # Contacts management
+│   ├── conversations.php # Conversations
+│   ├── messages.php   # Messages
+│   └── users.php      # User search
+├── config/
+│   └── database.php   # Database configuration
+├── includes/
+│   ├── Database.php   # PDO database class
+│   └── functions.php  # Helper functions
 ├── database/
-│   └── init.js        # Database schema initialization
+│   └── schema.sql     # MySQL schema
 └── README.md          # Documentation
 ```
 
@@ -161,7 +153,7 @@ alpha-agent/
 - All messages are encrypted client-side before transmission
 - Private keys are stored locally in the browser
 - Session tokens expire after 7 days
-- Passwords are hashed with bcrypt (12 rounds)
+- Passwords are hashed with bcrypt
 
 ## Browser Support
 
