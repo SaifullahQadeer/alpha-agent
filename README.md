@@ -1,239 +1,182 @@
-# Alpha Agent - AI-Powered Task Management
+# SecureChat - End-to-End Encrypted Messaging
 
-A sophisticated, futuristic web application for task management with intelligent time tracking, client management, and AI-powered insights to optimize your workflow.
+A professional, real-time chat application with end-to-end encryption, built with Node.js, Express, and SQLite.
 
 ## Features
 
-### Core Functionality
+### Security
+- **End-to-End Encryption**: Messages encrypted using AES-256-GCM
+- **RSA Key Exchange**: 2048-bit RSA-OAEP for secure key exchange
+- **Password Hashing**: bcrypt with 12 rounds for secure password storage
+- **Token Authentication**: UUID-based session tokens with 7-day expiry
 
-#### Task Management
-- Create, edit, and delete tasks with rich metadata
-- Organize tasks by client, priority (high/medium/low), and estimated hours
-- Track task completion status
-- Filter tasks by status (all/active/completed)
-- Visual priority indicators with color coding
+### Core Features
+- **User Authentication**: Register, login, and secure session management
+- **Contact Management**: Add, search, and manage contacts
+- **Real-time Messaging**: Send and receive messages instantly
+- **Message Status**: Track sent, delivered, and read status
+- **Typing Indicators**: See when contacts are typing
+- **Conversation History**: Full message history with date separators
 
-#### Time Tracking
-- Log time entries for specific tasks
-- Track hours worked with detailed notes
-- Associate time entries with clients and tasks
-- Automatic revenue calculation based on client hourly rates
-- View comprehensive time entry history
-
-#### Client Management
-- Add and manage client profiles
-- Set custom hourly rates for each client
-- Track total hours and revenue per client
-- Monitor active tasks per client
-- View client statistics and project types
-
-#### Weekly Reports
-- Automatic weekly report generation
-- Total hours, revenue, and task completion metrics
-- Average daily hours calculation
-- Work breakdown by client
-- Daily hour distribution
-- Top tasks by time spent
-
-### AI-Powered Insights
-
-The application includes an intelligent agent that analyzes your work patterns and provides actionable insights:
-
-#### Workload Optimization
-- Detects high workload conditions (>8 hours/day average)
-- Identifies capacity when you're underutilized (<4 hours/day)
-- Recommends task redistribution to prevent burnout
-- Suggests optimal daily work hours based on remaining tasks
-
-#### Revenue Optimization
-- Identifies highest and lowest revenue clients
-- Suggests focusing on high-value clients
-- Recommends rate adjustments for better profitability
-
-#### Task Management Insights
-- Monitors task completion rates
-- Alerts on low completion rates (<30%)
-- Encourages breaking down large tasks
-- Celebrates high achievement (>80% completion)
-
-#### Work-Life Balance
-- Weekend planning suggestions
-- Uneven work distribution detection
-- Break time recommendations
-- Next week planning with daily hour targets
-
-#### Upcoming Week Planning
-- Calculates remaining work hours
-- Recommends daily work schedule
-- Prioritizes high-priority tasks
-- Provides capacity planning
+### User Interface
+- **Modern Dark Theme**: Professional dark UI with light theme option
+- **Responsive Design**: Works on desktop and mobile devices
+- **Emoji Picker**: Built-in emoji support with categories
+- **Search**: Search through contacts and conversations
+- **Notifications**: Toast notifications for actions and events
 
 ## Technology Stack
 
-- **Frontend**: Pure JavaScript (ES6+), HTML5, CSS3
-- **Storage**: LocalStorage for data persistence
-- **Design**: Modern futuristic UI with CSS animations and gradients
-- **AI**: Rule-based intelligent algorithms for insights generation
+- **Backend**: Node.js with Express.js
+- **Database**: SQLite with better-sqlite3
+- **Frontend**: Vanilla JavaScript (ES6+)
+- **Styling**: CSS3 with CSS Variables
+- **Authentication**: bcryptjs + UUID tokens
+- **Encryption**: Web Crypto API
 
-## Getting Started
+## Database Schema
 
-### Installation
+```sql
+users              - User accounts with encrypted public keys
+contacts           - User relationships and contact lists
+conversations      - Chat conversations (direct messages)
+conversation_participants - Conversation membership
+messages           - Encrypted messages with metadata
+message_read_receipts - Read receipt tracking
+sessions           - Authentication sessions
+```
+
+## API Endpoints
+
+### Authentication
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/auth/register` | Create new account |
+| POST | `/api/auth/login` | User login |
+| POST | `/api/auth/logout` | User logout |
+| GET | `/api/auth/me` | Get current user |
+
+### Users
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/users/search?q=` | Search users |
+| GET | `/api/users/:username` | Get user profile |
+| PUT | `/api/users/profile` | Update profile |
+
+### Contacts
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/contacts` | List contacts |
+| POST | `/api/contacts` | Add contact |
+| DELETE | `/api/contacts/:username` | Remove contact |
+
+### Conversations
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/conversations` | List conversations |
+| POST | `/api/conversations` | Start conversation |
+| GET | `/api/conversations/:id` | Get conversation |
+| GET | `/api/conversations/:id/messages` | Get messages |
+| POST | `/api/conversations/:id/messages` | Send message |
+| POST | `/api/conversations/:id/read` | Mark as read |
+
+## Installation
+
+### Prerequisites
+- Node.js 18+
+- npm or yarn
+
+### Local Development
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
+git clone https://github.com/SaifullahQadeer/alpha-agent.git
 cd alpha-agent
 ```
 
-2. Open the application:
-Simply open `index.html` in your web browser. No build process or dependencies required!
-
-### First Time Setup
-
-The application comes with sample data to help you get started:
-- 2 demo clients (TechCorp Inc. and StartupXYZ)
-- 3 sample tasks with different priorities
-- 2 time entries
-
-You can delete this sample data and add your own clients and tasks.
-
-## Usage Guide
-
-### Adding a Client
-
-1. Navigate to the "Clients" tab
-2. Click "Add Client"
-3. Fill in:
-   - Client name
-   - Email (optional)
-   - Hourly rate
-   - Project type
-4. Click "Create Client"
-
-### Creating a Task
-
-1. Navigate to the "Tasks" tab
-2. Click "Add Task"
-3. Fill in:
-   - Task title
-   - Description
-   - Select client
-   - Priority level
-   - Estimated hours
-4. Click "Create Task"
-
-### Logging Time
-
-1. Navigate to the "Time Tracking" tab
-2. Click "Log Time"
-3. Fill in:
-   - Select task
-   - Date
-   - Hours worked
-   - Notes (optional)
-4. Click "Log Time"
-
-The system automatically calculates revenue based on the client's hourly rate.
-
-### Viewing Reports
-
-1. Navigate to the "Reports" tab
-2. Click "Generate Report" to see the current week's data
-3. Review metrics including:
-   - Total hours and revenue
-   - Tasks completed
-   - Average daily hours
-   - Breakdown by client and day
-   - Top tasks by time spent
-
-### Getting AI Insights
-
-1. Navigate to the "AI Insights" tab
-2. Click "Refresh" to generate new insights
-3. Review personalized recommendations for:
-   - Workload optimization
-   - Revenue opportunities
-   - Task management tips
-   - Upcoming week planning
-   - Work-life balance suggestions
-
-## Features Breakdown
-
-### Dashboard Statistics
-The header displays real-time stats:
-- **Today**: Hours worked today
-- **This Week**: Total hours this week
-- **Revenue**: Total revenue this week
-
-### Task Filters
-- **All**: View all tasks
-- **Active**: View only incomplete tasks
-- **Completed**: View only finished tasks
-
-### Priority System
-- **High**: Urgent tasks requiring immediate attention (red indicator)
-- **Medium**: Standard priority tasks (orange indicator)
-- **Low**: Tasks that can be done when time permits (green indicator)
-
-## Data Storage
-
-All data is stored locally in your browser using LocalStorage. This means:
-- ✅ Your data is private and never leaves your device
-- ✅ No server or internet connection required
-- ✅ Fast and responsive
-- ⚠️ Clearing browser data will delete your information
-- ⚠️ Data is browser-specific (not synced across devices)
-
-To backup your data, you can export it from the browser's developer console:
-```javascript
-localStorage.getItem('tasks')
-localStorage.getItem('clients')
-localStorage.getItem('timeEntries')
+2. Install dependencies:
+```bash
+npm install
 ```
 
-## Design Philosophy
+3. Start the server:
+```bash
+npm start
+```
 
-Alpha Agent features a futuristic, modern design with:
-- Dark theme optimized for long working sessions
-- Smooth animations and transitions
-- Gradient accents for visual hierarchy
-- Responsive layout for all screen sizes
-- Intuitive navigation
-- Clean, minimalist interface
+4. Open your browser:
+```
+http://localhost:3000
+```
 
-## Browser Compatibility
+## Deployment on Hostinger
 
-Works best on modern browsers:
+### Node.js Frontend Web App Setup
+
+1. **Connect Repository**: Link your GitHub repository in Hostinger
+2. **Build Settings**:
+   - Build command: `npm install`
+   - Start command: `npm start`
+3. **Environment**: Node.js 18+
+4. **Port**: The app uses `process.env.PORT` or defaults to 3000
+
+### Environment Variables (Optional)
+```
+PORT=3000
+NODE_ENV=production
+```
+
+## Project Structure
+
+```
+alpha-agent/
+├── chat.html          # Main chat interface
+├── chat.css           # Styles and themes
+├── chat.js            # Frontend application logic
+├── server.js          # Express.js API server
+├── package.json       # Node.js dependencies
+├── database/
+│   └── init.js        # Database schema initialization
+└── README.md          # Documentation
+```
+
+## Usage
+
+### Getting Started
+
+1. **Create Account**: Click "Create Account" and fill in your details
+2. **Add Contacts**: Go to Contacts tab and add users by username
+3. **Start Chatting**: Click on a contact to start a conversation
+4. **Send Messages**: Type your message and press Enter or click Send
+
+### Features Guide
+
+- **Search**: Use the search bar to find contacts or conversations
+- **Themes**: Go to Settings to switch between dark/light themes
+- **Emoji**: Click the emoji button to add emojis to messages
+- **Contact Info**: Click the info button to view contact details
+
+## Security Notes
+
+- All messages are encrypted client-side before transmission
+- Private keys are stored locally in the browser
+- Session tokens expire after 7 days
+- Passwords are hashed with bcrypt (12 rounds)
+
+## Browser Support
+
 - Chrome/Edge 90+
 - Firefox 88+
 - Safari 14+
 
-## Future Enhancements
-
-Potential features for future versions:
-- Data export/import (JSON, CSV)
-- Cloud synchronization
-- Team collaboration features
-- Advanced reporting with charts
-- Integration with calendar apps
-- Mobile app version
-- Dark/light theme toggle
-- Custom AI insight rules
-- Task dependencies and subtasks
-- Project templates
-
-## Contributing
-
-This is an open-source project. Feel free to fork, modify, and enhance!
-
 ## License
 
-MIT License - feel free to use this application for personal or commercial purposes.
+MIT License - feel free to use for personal or commercial projects.
 
 ## Support
 
-For issues, questions, or suggestions, please open an issue on GitHub.
+For issues or questions, please open an issue on GitHub.
 
 ---
 
-**Built with ❤️ for productivity enthusiasts and freelancers**
+**Built for secure, private communication**

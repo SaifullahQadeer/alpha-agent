@@ -6,15 +6,22 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
+    "build": "npm install",
     "init-db": "node database/init.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "keywords": [
     "chat",
     "encryption",
     "e2e",
-    "messaging"
+    "messaging",
+    "nodejs",
+    "express",
+    "sqlite"
   ],
-  "author": "",
+  "author": "SaifullahQadeer",
   "license": "MIT",
   "dependencies": {
     "bcryptjs": "^2.4.3",
